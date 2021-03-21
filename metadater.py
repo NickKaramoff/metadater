@@ -1,9 +1,11 @@
+#!/usr/bin/env python3
+
 import argparse
-from datetime import datetime, timezone
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple, List
 
 from exif import Image, DATETIME_STR_FORMAT
 
@@ -18,10 +20,14 @@ def esc(code: int) -> str:
     return f"\033[{code}m"
 
 
-CoordinatesDec = tuple[float, float]
-CoordinatesDMS = tuple[
-    tuple[tuple[int, int, float], str], tuple[tuple[int, int, float], str]
-]
+LatitudeDec = float
+LongitudeDec = float
+CoordinatesDec = Tuple[LatitudeDec, LongitudeDec]
+
+DegMinSec = Tuple[int, int, float]
+LatitudeDMS = Tuple[DegMinSec, str]
+LongitudeDMS = Tuple[DegMinSec, str]
+CoordinatesDMS = Tuple[LatitudeDMS, LongitudeDMS]
 
 
 def coords_dms2dec(coords: CoordinatesDMS) -> CoordinatesDec:
@@ -44,12 +50,14 @@ def coords_dec2dms(coords: CoordinatesDec) -> CoordinatesDMS:
     lon_m = int((abs(coords[1]) - lon_d) * 60)
     lon_s = ((abs(coords[1]) - lon_d) * 60 - lon_m) * 60
 
-    return (((lat_d, lat_m, lat_s), lat_o), ((lon_d, lon_m, lon_s), lon_o))
+    return ((lat_d, lat_m, lat_s), lat_o), ((lon_d, lon_m, lon_s), lon_o)
 
 
-def get_info_from_exif(image: Image) -> tuple[datetime, CoordinatesDMS]:
-    date: datetime = None
-    location: CoordinatesDMS = None
+def get_info_from_exif(
+    image: Image,
+) -> Tuple[Optional[datetime], Optional[CoordinatesDMS]]:
+    date: Optional[datetime] = None
+    location: Optional[CoordinatesDMS] = None
 
     if image.has_exif:
         try:
@@ -80,10 +88,9 @@ def get_info_from_exif(image: Image) -> tuple[datetime, CoordinatesDMS]:
     return date, location
 
 
-def get_info_from_json(file: Path) -> tuple[datetime, CoordinatesDMS]:
-    date: datetime = None
-    location: CoordinatesDMS = None
-
+def get_info_from_json(
+    file: Path,
+) -> Tuple[Optional[datetime], Optional[CoordinatesDMS]]:
     json_path = Path(str(file) + ".json")
     if not json_path.exists():
         return None, None
@@ -91,11 +98,11 @@ def get_info_from_json(file: Path) -> tuple[datetime, CoordinatesDMS]:
     with json_path.open("rb") as fo:
         json_dict = json.load(fo)
 
-    date = datetime.fromtimestamp(
+    date: Optional[datetime] = datetime.fromtimestamp(
         int(json_dict["photoTakenTime"]["timestamp"]), timezone.utc
     )
 
-    location = (
+    location: Optional[CoordinatesDec] = (
         json_dict["geoData"]["latitude"],
         json_dict["geoData"]["longitude"],
     )
@@ -105,13 +112,13 @@ def get_info_from_json(file: Path) -> tuple[datetime, CoordinatesDMS]:
 
 def get_info_from_filename(
     file: Path, formats: list[str]
-) -> tuple[datetime, CoordinatesDMS]:
-    date: datetime = None
+) -> tuple[Optional[datetime], Optional[CoordinatesDMS]]:
+    date: Optional[datetime] = None
 
-    for format in formats:
+    for fstr in formats:
         try:
-            file_stem_short = file.stem[: len(datetime.today().strftime(format))]
-            date = datetime.strptime(file_stem_short, format)
+            file_stem_short = file.stem[: len(datetime.today().strftime(fstr))]
+            date = datetime.strptime(file_stem_short, fstr)
             break
         except ValueError:
             continue
@@ -119,30 +126,32 @@ def get_info_from_filename(
     return date, None
 
 
-def process_one_file(file: Path, out: Path, strategies: list[str], formats: list[str]):
-    if not file.is_file():
+def process_one_file(
+    in_file: Path, out_file: Path, strategies: List[str], formats: List[str]
+):
+    if not in_file.is_file():
         return
 
-    if file.name.startswith("."):
+    if in_file.name.startswith("."):
         return
 
-    if file.suffix == ".json" or file.suffix == ".gif":
+    if in_file.suffix == ".json":
         return
 
-    print(f"{esc(1)}{esc(96)}{file.name}{esc(0)} =>\t", end="")
+    print(f"{esc(1)}{esc(96)}{in_file.name}{esc(0)} =>\t", end="")
 
-    date: datetime = None
+    date: Optional[datetime] = None
     location: Optional[CoordinatesDMS] = None
-    image = None
+    image: Optional[Image] = None
 
     for strategy in reversed(strategies):
         strategy = strategy.lower()
 
         if strategy == "exif":
             try:
-                with file.open("rb") as fo:
+                with in_file.open("rb") as fo:
                     image = Image(fo)
-            except:
+            except Exception:
                 image = None
                 continue
 
@@ -151,12 +160,12 @@ def process_one_file(file: Path, out: Path, strategies: list[str], formats: list
             location = e_location or location
 
         elif strategy == "json":
-            j_date, j_location = get_info_from_json(file)
+            j_date, j_location = get_info_from_json(in_file)
             date = j_date or date
             location = j_location or location
 
         elif strategy == "filename":
-            f_date, f_location = get_info_from_filename(file, formats)
+            f_date, f_location = get_info_from_filename(in_file, formats)
             date = f_date or date
             location = f_location or location
 
@@ -181,33 +190,34 @@ def process_one_file(file: Path, out: Path, strategies: list[str], formats: list
                 pass
 
     if image is not None:
-        with out.open("wb") as ofo:
-            ofo.write(image.get_file())
+        out_file.write_bytes(image.get_file())
     else:
-        out.write_bytes(file.read_bytes())
+        out_file.write_bytes(in_file.read_bytes())
 
     if date is not None:
-        os.utime(out, (date.timestamp(), date.timestamp()))
+        os.utime(out_file, (date.timestamp(), date.timestamp()))
 
 
-def process_files(input: Path, output: Path, strategies: list[str], formats: list[str]):
-    if not input.exists():
+def process_files(
+    in_dir: Path, out_dir: Path, strategies: list[str], formats: list[str]
+):
+    if not in_dir.exists():
         raise FileNotFoundError("Input directory does not exist")
 
-    if not input.is_dir():
+    if not in_dir.is_dir():
         raise ValueError("Input is not a directory")
 
-    if output.exists() and not output.is_dir():
+    if out_dir.exists() and not out_dir.is_dir():
         raise ValueError("Output is not a directory")
 
-    output.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    for file in input.iterdir():
-        process_one_file(file, output / file.name, strategies, formats)
+    for file in in_dir.iterdir():
+        process_one_file(file, out_dir / file.name, strategies, formats)
 
 
 parser = argparse.ArgumentParser(
-    prog="metadater", description="Google Photos metadata parser and applier"
+    prog="metadater", description="Photo metadata parser and applier"
 )
 parser.add_argument("ind", type=Path, metavar="IN", help="input directory")
 parser.add_argument("outd", type=Path, metavar="OUT", help="output directory")
