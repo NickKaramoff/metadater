@@ -1,12 +1,14 @@
 # metadater
 
-> A tool that adds date and location to the photos (and other files) based on EXIF, filenames and Google Photos JSON
+> A tool that adds date and location to the photos (and other files) based on EXIF, filenames and Google Photos JSON
 
-Initially I created this script to retag the photos I exported from Google Photos, since they all had the today's date. This script now can be used for all sorts of photos.
+Initially I created this script to retag the photos I exported from Google Photos, since they all had the today’s date. This script now can be used for all sorts of photos.
 
-This script finds the photo metadata (more specifically, date, time, and location of the shot) in EXIF tags, Google Photos JSON or file name (date and time only).
+This script finds the photo metadata (more specifically, date, time, and location of the shot) in EXIF tags, Google Photos JSON or file name (date and time only).
 
-The Google Photos JSON can be acquired when you export ypur photos with Google Takeout
+The Google Photos JSON can be acquired when you export your photos with [Google Takeout](https://takeout.google.com/).
+
+This script was tested on Python 3.9, but should work all the way down to 3.6.
 
 ## Usage
 
