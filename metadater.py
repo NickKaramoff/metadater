@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import argparse
 import json
 import os
 from datetime import datetime, timezone
@@ -216,28 +215,29 @@ def process_files(
         process_one_file(file, out_dir / file.name, strategies, formats)
 
 
-parser = argparse.ArgumentParser(
-    prog="metadater", description="Photo metadata parser and applier"
-)
-parser.add_argument("ind", type=Path, metavar="IN", help="input directory")
-parser.add_argument("outd", type=Path, metavar="OUT", help="output directory")
-parser.add_argument(
-    "-s",
-    type=lambda s: s.split(","),
-    metavar="STRATEGIES",
-    default="exif,json,filename",
-    help="comma-separated search strategies (exif, json, filename)",
-    dest="strategies",
-)
-parser.add_argument(
-    "-n",
-    type=lambda s: s.split(","),
-    metavar="FORMAT",
-    default="IMG_%Y%m%d_%H%M%S",
-    help="comma-separated search file name formats for 'filename' strategy",
-    dest="nameformat",
-)
-
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="metadater", description="Photo metadata parser and applier"
+    )
+    parser.add_argument("ind", type=Path, metavar="IN", help="input directory")
+    parser.add_argument("outd", type=Path, metavar="OUT", help="output directory")
+    parser.add_argument(
+        "-s",
+        type=lambda s: s.split(","),
+        metavar="STRATEGIES",
+        default="exif,json,filename",
+        help="comma-separated search strategies (exif, json, filename)",
+        dest="strategies",
+    )
+    parser.add_argument(
+        "-n",
+        type=lambda s: s.split(","),
+        metavar="FORMAT",
+        default="IMG_%Y%m%d_%H%M%S",
+        help="comma-separated search file name formats for 'filename' strategy",
+        dest="nameformat",
+    )
     args = parser.parse_args()
     process_files(args.ind, args.outd, args.strategies, args.nameformat)
